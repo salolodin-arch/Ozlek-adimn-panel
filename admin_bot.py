@@ -110,7 +110,7 @@ async def add_medicine_photo(message: Message, state: FSMContext, bot: Bot):
     )
     await state.clear()
 
-    status_line = "🌐 Rasm saytga ham yuklandi." if photo_url else "⚠️ Rasm saytga yuklanmadi (IMGBB_API_KEY tekshiring), lekin botda ko'rinadi."
+    status_line = "🌐 Rasm saytga ham yuklandi." if photo_url else "⚠️ Rasm saytga yuklanmadi (Railway Logs'ni tekshiring), lekin botda ko'rinadi."
     await message.answer(
         f"✅ Dori qo'shildi! (ID: {medicine_id})\n\n"
         f"Nomi: {data['name']}\n{status_line}",
