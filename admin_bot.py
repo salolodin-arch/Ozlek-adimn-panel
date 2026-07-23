@@ -1,20 +1,13 @@
 """
-OZ-LEK — Admin panel (Telegram bot orqali).
-Bu fayl to'liq mustaqil — Railway'da shu faylni ishga tushirsangiz bo'ldi:
-    python admin_bot.py
-
-Faqat ADMIN_CHAT_ID ga tegishli odam ishlata oladi (boshqa hech kim emas).
-
+Admin bot — faqat ADMIN_CHAT_ID ga tegishli odam ishlata oladi.
 Imkoniyatlari:
-  /start                          - asosiy menyu
-  ➕ Dori qo'shish                 - nomi -> tavsifi -> rasm (bosqichma-bosqich so'raydi)
-  📋 Dorilar ro'yxati              - barcha dorilar, har birida "Tahrirlash" / "O'chirish"
-  🏢 Kompaniya ma'lumotini yangilash - "Oz-Lek haqida" matnini almashtirish
+  /start        - menyu
+  Dori qo'shish  - nomi -> tavsifi -> rasm (bosqichma-bosqich so'raydi)
+  Dorilar ro'yxati - barcha dorilarni ko'rsatadi, har birida "Tahrirlash" / "O'chirish" tugmasi
+  Kompaniya haqida - "Oz-Lek haqida" matnini yangilash
 """
 
-import asyncio
 import logging
-
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -33,8 +26,8 @@ logging.basicConfig(level=logging.INFO)
 router = Router()
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id == ADMIN_CHAT_ID
+def admin_only(message_or_call) -> bool:
+    return message_or_call.from_user.id == ADMIN_CHAT_ID
 
 
 MAIN_MENU = ReplyKeyboardMarkup(
@@ -62,24 +55,13 @@ class EditCompany(StatesGroup):
     text = State()
 
 
-# ---------- Ruxsat tekshiruvi (barcha xabarlar uchun birinchi filtr) ----------
-
-@router.message(F.from_user.id != ADMIN_CHAT_ID)
-async def block_non_admin(message: Message):
-    await message.answer("⛔ Bu bot faqat OZ-LEK administratori uchun.")
-
-
-@router.callback_query(F.from_user.id != ADMIN_CHAT_ID)
-async def block_non_admin_callback(call: CallbackQuery):
-    await call.answer("Ruxsat yo'q", show_alert=True)
-
-
-# ---------- Asosiy menyu ----------
-
 @router.message(Command("start"))
 async def cmd_start(message: Message):
+    if not admin_only(message):
+        await message.answer("Bu bot faqat admin uchun.")
+        return
     await message.answer(
-        "Assalomu alaykum! OZ-LEK admin panelga xush kelibsiz.\n"
+        "Assalomu alaykum! Oz-Lek admin panelga xush kelibsiz.\n"
         "Quyidagi menyudan birini tanlang:",
         reply_markup=MAIN_MENU,
     )
@@ -89,6 +71,8 @@ async def cmd_start(message: Message):
 
 @router.message(F.text == "➕ Dori qo'shish")
 async def add_medicine_start(message: Message, state: FSMContext):
+    if not admin_only(message):
+        return
     await state.set_state(AddMedicine.name)
     await message.answer("Dorining nomini yozing:", reply_markup=ReplyKeyboardRemove())
 
@@ -118,7 +102,8 @@ async def add_medicine_photo(message: Message, state: FSMContext):
     )
     await state.clear()
     await message.answer(
-        f"✅ Dori qo'shildi! (ID: {medicine_id})\n\nNomi: {data['name']}",
+        f"✅ Dori qo'shildi! (ID: {medicine_id})\n\n"
+        f"Nomi: {data['name']}",
         reply_markup=MAIN_MENU,
     )
 
@@ -132,6 +117,8 @@ async def add_medicine_photo_invalid(message: Message):
 
 @router.message(F.text == "📋 Dorilar ro'yxati")
 async def list_medicines_handler(message: Message):
+    if not admin_only(message):
+        return
     medicines = db.list_medicines()
     if not medicines:
         await message.answer("Hozircha dorilar yo'q.")
@@ -150,6 +137,8 @@ async def list_medicines_handler(message: Message):
 
 @router.callback_query(F.data.startswith("delete_"))
 async def delete_medicine_handler(call: CallbackQuery):
+    if call.from_user.id != ADMIN_CHAT_ID:
+        return
     medicine_id = int(call.data.split("_")[1])
     db.delete_medicine(medicine_id)
     await call.answer("O'chirildi ✅")
@@ -158,6 +147,8 @@ async def delete_medicine_handler(call: CallbackQuery):
 
 @router.callback_query(F.data.startswith("edit_"))
 async def edit_medicine_handler(call: CallbackQuery, state: FSMContext):
+    if call.from_user.id != ADMIN_CHAT_ID:
+        return
     medicine_id = int(call.data.split("_")[1])
     await state.update_data(medicine_id=medicine_id)
     await state.set_state(EditMedicine.field)
@@ -208,6 +199,8 @@ async def edit_medicine_value(message: Message, state: FSMContext):
 
 @router.message(F.text == "🏢 Kompaniya ma'lumotini yangilash")
 async def edit_company_start(message: Message, state: FSMContext):
+    if not admin_only(message):
+        return
     current = db.get_company_info()
     await state.set_state(EditCompany.text)
     await message.answer(
@@ -223,16 +216,9 @@ async def edit_company_save(message: Message, state: FSMContext):
     await message.answer("✅ Kompaniya ma'lumoti yangilandi!", reply_markup=MAIN_MENU)
 
 
-# ---------- Ishga tushirish ----------
-
-async def main():
+async def run_admin_bot():
     db.init_db()
     bot = Bot(token=ADMIN_BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
-    logging.info("Admin bot ishga tushdi...")
     await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
