@@ -4,10 +4,15 @@ Admin bot ham, mijozlar boti ham, API ham shu faylni ishlatadi —
 shuning uchun barcha uchtasida ma'lumot bir xil bo'ladi.
 """
 
+import os
 import sqlite3
 from contextlib import contextmanager
+import db_backup
 
-DB_PATH = "oz_lek.db"
+# Railway'da Volume ulanganda DB_PATH=/data/oz_lek.db deb Variables'ga qo'shasiz —
+# shunda ma'lumotlar har qanday qayta deploy qilishda ham saqlanib qoladi.
+# Agar Variable qo'shilmagan bo'lsa, standart holatda konteyner ichida saqlanadi (vaqtinchalik).
+DB_PATH = os.getenv("DB_PATH", "oz_lek.db")
 
 
 @contextmanager
@@ -21,6 +26,7 @@ def get_conn():
 
 
 def init_db():
+    db_backup.pull_from_github(DB_PATH)
     with get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS medicines (
@@ -61,7 +67,9 @@ def add_medicine(name: str, description: str, photo_file_id: str = None, photo_u
             (name, description, photo_file_id, photo_url),
         )
         conn.commit()
-        return cur.lastrowid
+        medicine_id = cur.lastrowid
+    db_backup.push_to_github(DB_PATH)
+    return medicine_id
 
 
 def list_medicines():
@@ -103,14 +111,18 @@ def update_medicine(medicine_id: int, name: str = None, description: str = None,
             ),
         )
         conn.commit()
-        return True
+    db_backup.push_to_github(DB_PATH)
+    return True
 
 
 def delete_medicine(medicine_id: int) -> bool:
     with get_conn() as conn:
         cur = conn.execute("DELETE FROM medicines WHERE id = ?", (medicine_id,))
         conn.commit()
-        return cur.rowcount > 0
+        deleted = cur.rowcount > 0
+    if deleted:
+        db_backup.push_to_github(DB_PATH)
+    return deleted
 
 
 # ---------- Kompaniya haqida ma'lumot ----------
@@ -129,3 +141,4 @@ def set_company_info(text: str):
             (text,),
         )
         conn.commit()
+    db_backup.push_to_github(DB_PATH)
