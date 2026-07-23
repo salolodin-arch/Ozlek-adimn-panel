@@ -20,6 +20,7 @@ from aiogram.types import (
 
 import database as db
 from config import ADMIN_BOT_TOKEN, ADMIN_CHAT_ID
+from image_upload import upload_image_to_imgbb
 
 logging.basicConfig(level=logging.INFO)
 
@@ -92,18 +93,27 @@ async def add_medicine_description(message: Message, state: FSMContext):
 
 
 @router.message(AddMedicine.photo, F.photo)
-async def add_medicine_photo(message: Message, state: FSMContext):
+async def add_medicine_photo(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     photo_file_id = message.photo[-1].file_id
+
+    await message.answer("⏳ Rasm saytga yuklanmoqda...")
+    file = await bot.get_file(photo_file_id)
+    image_bytes_io = await bot.download_file(file.file_path)
+    photo_url = await upload_image_to_imgbb(image_bytes_io.read())
+
     medicine_id = db.add_medicine(
         name=data["name"],
         description=data["description"],
         photo_file_id=photo_file_id,
+        photo_url=photo_url,
     )
     await state.clear()
+
+    status_line = "🌐 Rasm saytga ham yuklandi." if photo_url else "⚠️ Rasm saytga yuklanmadi (IMGBB_API_KEY tekshiring), lekin botda ko'rinadi."
     await message.answer(
         f"✅ Dori qo'shildi! (ID: {medicine_id})\n\n"
-        f"Nomi: {data['name']}",
+        f"Nomi: {data['name']}\n{status_line}",
         reply_markup=MAIN_MENU,
     )
 
@@ -176,7 +186,7 @@ async def edit_medicine_field(call: CallbackQuery, state: FSMContext):
 
 
 @router.message(EditMedicine.value)
-async def edit_medicine_value(message: Message, state: FSMContext):
+async def edit_medicine_value(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
     medicine_id = data["medicine_id"]
     field = data["field"]
@@ -185,7 +195,12 @@ async def edit_medicine_value(message: Message, state: FSMContext):
         if not message.photo:
             await message.answer("Iltimos, rasm yuboring.")
             return
-        db.update_medicine(medicine_id, photo_file_id=message.photo[-1].file_id)
+        await message.answer("⏳ Rasm saytga yuklanmoqda...")
+        photo_file_id = message.photo[-1].file_id
+        file = await bot.get_file(photo_file_id)
+        image_bytes_io = await bot.download_file(file.file_path)
+        photo_url = await upload_image_to_imgbb(image_bytes_io.read())
+        db.update_medicine(medicine_id, photo_file_id=photo_file_id, photo_url=photo_url)
     elif field == "name":
         db.update_medicine(medicine_id, name=message.text)
     elif field == "description":
