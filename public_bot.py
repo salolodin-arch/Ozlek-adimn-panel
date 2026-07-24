@@ -162,6 +162,7 @@ async def periodic_sync(interval_seconds: int = 120):
 
 
 async def run_public_bot():
+    """Botni GitHub bilan davriy sinxronlashtirish (periodic_sync) bilan birga ishga tushiradi."""
     db.init_db()
     bot = Bot(token=PUBLIC_BOT_TOKEN)
     dp = Dispatcher()
@@ -170,3 +171,12 @@ async def run_public_bot():
         dp.start_polling(bot),
         periodic_sync(),
     )
+
+
+async def run_public_bot_no_sync():
+    """Botni GitHub bilan davriy sinxronlashtirishsiz (periodic_sync'siz) ishga tushiradi."""
+    db.init_db()
+    bot = Bot(token=PUBLIC_BOT_TOKEN)
+    dp = Dispatcher()
+    dp.include_router(router)
+    await dp.start_polling(bot)
