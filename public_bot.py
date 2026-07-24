@@ -13,6 +13,7 @@ Agar hech narsa topilmasa — faqat: "Kechirasiz, bunday dori mavjud emas."
 "Oz-Lek haqida" — menyudagi alohida tugma orqali yoki matn/ovoz bilan so'ralsa chiqadi.
 """
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -24,6 +25,7 @@ from aiogram.types import (
 )
 
 import database as db
+import db_backup
 import text_utils
 from config import PUBLIC_BOT_TOKEN
 
@@ -147,9 +149,24 @@ async def free_text(message: Message):
     await route_text_query(message, message.text)
 
 
-async def run_public_bot_no_sync():
-    """Admin bot bilan bitta jarayonda, bitta faylni bevosita baham ko'rganda ishlatiladi."""
+async def periodic_sync(interval_seconds: int = 120):
+    """Admin panelda qilingan o'zgarishlarni har 2 daqiqada GitHub'dan qayta yuklab turadi
+    (bu bot admin botdan ALOHIDA serverda ishlagani uchun kerak)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            db_backup.pull_from_github(db.DB_PATH)
+            logging.info("🔄 Ma'lumotlar GitHub'dan yangilandi.")
+        except Exception as e:
+            logging.warning(f"Davriy yangilashda xatolik: {e}")
+
+
+async def run_public_bot():
+    db.init_db()
     bot = Bot(token=PUBLIC_BOT_TOKEN)
     dp = Dispatcher()
     dp.include_router(router)
-    await dp.start_polling(bot)
+    await asyncio.gather(
+        dp.start_polling(bot),
+        periodic_sync(),
+    )
